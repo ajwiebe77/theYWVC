@@ -20,7 +20,7 @@ Copying all files to a folder and then opening and running the app.R file within
 
 References
 
-Nagheli, S., Samani, N., Barry, D.A., 2020. Capture zone models of multi-well system in aquifers bounded with regular and irregular inflow boundaries. J. Hydrol. X 7, 100053. DOI: 10.1016/j.hydroa.2020.100053.
+Nagheli, S., Samani, N., Barry, D.A., 2020. Capture zone models of multi-well system in aquifers bounded with regular and irregular inflow boundaries. J. Hydrol. X 7, 100053. https://doi.org/10.1016/j.hydroa.2020.100053.
 
 R Core Team, 2022. R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. https://www.R-project.org/ (Accessed 17 Mar 2022).
 
