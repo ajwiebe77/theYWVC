@@ -1,12 +1,14 @@
 # app.R
 #
-# Author: Andrew J. Wiebe, 19 Dec 2022
+# Author: Andrew J. Wiebe, 20 Dec 2022
 #
-# The Yukon Well Vulnerability Calculator, version 1.1
+# The Yukon Well Vulnerability Calculator, version 1.2
 #
+# Version 1.2 - Notes:
+#     Added ability to export shapefiles (in a zipped file) via a "Download" link on the Visualization tab
+#     Synced the map centre and zoom level of the map in the Visualize tab with the map in the Setup tab
 # Version 1.1 - Notes:
 #     Regarding exporting shapefile points: the "Points to path" tool in, for example, QGIS (https://www.qgis.org/en/site/) can be used to generate lines from the sets of points using the "group" and "order" attributes.
-#     Shapefile export now supported
 #     Results graph on Visualize tab now matches the scale of the map in that tab
 #
 # Code ideas from the websites listed below (and in the code):
@@ -284,8 +286,9 @@ ui <- fluidPage(
              # column(3,
                     # actionButton("exportSHP", "Export Shapefile")
              # )
-             # radioButtons("radioSHP_vis", h3("Export shapefile"),
-             #                                 choices = list("Yes" = 1, "No" = 2),selected=2)
+             radioButtons("radioSHP_vis", h3("Export shapefile"),                             # use this line and the next for exporting
+                                             choices = list("Yes" = 1, "No" = 2),selected=2),
+             downloadLink("downloadSHPlink", label = "Download") # https://shiny.rstudio.com/reference/shiny/latest/downloadbutton
             ),
            # fluidRow(
            #   column(12,
@@ -445,7 +448,7 @@ ui <- fluidPage(
                ),
                h1("Citation"),
                p("The recommended citation for this app is:"),
-               p("Wiebe, A.J., and McKenzie, J.M. 2022. The Yukon Well Vulnerability Calculator. CC-BY-... https://ajwiebe77.shinyapps.io/ywvc_v1/.")
+               p("Wiebe, A.J., and McKenzie, J.M. 2022. The Yukon Well Vulnerability Calculator. Version: <version # above>. https://ajwiebe77.shinyapps.io/the-yukon-well-vulnerability-calculator/.")
             )
     )
     
@@ -539,11 +542,16 @@ server <- function(input, output, session) {
       #) %>%
       #addMarkers(data = points())
     
-    if(input$radioComm_setup == 1){
+    ### generalize: load the same view as on the setup map (Setup tab)
+    ### https://stackoverflow.com/questions/34985889/how-to-get-the-zoom-level-from-the-leaflet-map-in-r-shiny
+    m_setup <- leaflet() %>% setView(lng = input$setupMap_center$lng, lat = input$setupMap_center$lat, zoom = input$setupMap_zoom)
+    m_setup %>% addTiles()
+    
+    # if(input$radioComm_setup == 1){
       # Whitehorse:
-      m_setup <- leaflet() %>% setView(lng = -135.056839, lat = 60.721188, zoom = 12)
-      m_setup %>% addTiles()
-    }
+      # m_setup <- leaflet() %>% setView(lng = -135.056839, lat = 60.721188, zoom = 12)
+      # m_setup %>% addTiles()
+    # }
     
     # if(input$radioComm_setup == 1){
     #   # Carmacks:
@@ -1254,109 +1262,142 @@ server <- function(input, output, session) {
       
     })
     
-    # if(input$radioSHP_vis == 1){ ### export shapefiles
-    #   # ### Save data as shapefiles -----------------------------------------
-    #   z1 <- long2UTM(input$outputMap_center$lng)
-    #   #utm.prj <- "+proj=utm +zone=z1 ellps=WGS84"
-    #   # proj <- CRS("+proj=utm +zone=8 +datum=WGS84") # Carmacks is in UTM Zone 8N
-    #   proj <- CRS(paste(sep="","+proj=utm ", "+zone=", z1, " +datum=WGS84"))
-    #   
-    #   ### Need lists of (x,y,phi) and (x,y,psi) points, not just the phi and psi matrices
-    #   
-    #   ### export equipotential lines
-    #   counter <- 1
-    #   xyphi <- matrix(data=0.0,numpts*numpts,4)
-    #   
-    #   for(i in 1:length(phi_list2)){
-    #     for(ii in 1:length(phi_list2[[i]]$x)){
-    #       if(is.na(phi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
-    #         xyphi[counter,1] <- phi_list2[[i]]$x[ii]
-    #         xyphi[counter,2] <- phi_list2[[i]]$y[ii]
-    #         xyphi[counter,3] <- i # group number
-    #         xyphi[counter,4] <- ii # order number
-    #         counter <- counter + 1
-    #       }
-    #     }
-    #   }
-    #   
-    #   xyphi <- xyphi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
-    #   
-    #   # print(counter)
-    #   # write.csv(xyphi, file = "xyphi.txt")
-    #   
-    #   equipotpts <- SpatialPoints(xyphi, proj4string = proj)
-    #   shapefile(equipotpts, filename = "equipotential.shp", overwrite = TRUE)
-    #   # ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
-    #   dbfdata <- read.dbf("equipotential.dbf", as.is = TRUE)
-    #   # ## add new attribute data (just the numbers 1 to the number of objects)
-    #   dbfdata$group <- xyphi[,3] ### creates a new field called "group"
-    #   dbfdata$order <- xyphi[,4] ### creates a new field called "order"
-    #   write.dbf(dbfdata, "equipotential.dbf") ## overwrite the file with this new copy
-    #   
-    #   ### export flowlines
-    #   counter <- 1
-    #   xypsi <- matrix(data=0.0,numpts*numpts,4)
-    #   
-    #   for(i in 1:length(psi_list2)){
-    #     for(ii in 1:length(psi_list2[[i]]$x)){
-    #       if(is.na(psi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
-    #         xypsi[counter,1] <- psi_list2[[i]]$x[ii]
-    #         xypsi[counter,2] <- psi_list2[[i]]$y[ii]
-    #         xypsi[counter,3] <- i # group number
-    #         xypsi[counter,4] <- ii # order number
-    #         counter <- counter + 1
-    #       }
-    #     }
-    #   }
-    #   
-    #   xypsi <- xypsi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
-    #   
-    #   flowlinepts <- SpatialPoints(xypsi, proj4string = proj)
-    #   shapefile(flowlinepts, filename = "flowlines.shp", overwrite = TRUE)
-    #   ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
-    #   dbfdata <- read.dbf("flowlines.dbf", as.is = TRUE)
-    #   # ## add new attribute data (just the numbers 1 to the number of objects)
-    #   dbfdata$group <- xypsi[,3] ### creates a new field called "group"
-    #   dbfdata$order <- xypsi[,4] ### creates a new field called "order"
-    #   write.dbf(dbfdata, "flowlines.dbf") ## overwrite the file with this new copy
-    #   
-    #   ### export capture zone boundaries
-    #   
-    #   counter <- 1
-    #   xycap <- matrix(data=0.0,numpts*numpts,4)
-    #   
-    #   for(i in 1:length(capzones2)){
-    #     for(ii in 1:length(capzones2[[i]][,1])){
-    #       if(is.na(capzones2[[i]][ii,1]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
-    #         xycap[counter,1] <- capzones2[[i]][ii,1]
-    #         xycap[counter,2] <- capzones2[[i]][ii,2]
-    #         xycap[counter,3] <- i # group number
-    #         xycap[counter,4] <- ii # order number
-    #         counter <- counter + 1
-    #       }
-    #     }
-    #   }
-    #   
-    #   xycap <- xycap[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
-    #   
-    #   cappts <- SpatialPoints(xycap, proj4string = proj)
-    #   shapefile(cappts, filename = "capzones.shp", overwrite = TRUE)
-    #   ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
-    #   dbfdata <- read.dbf("capzones.dbf", as.is = TRUE)
-    #   # ## add new attribute data (just the numbers 1 to the number of objects)
-    #   dbfdata$group <- xycap[,3] ### creates a new field called "group"
-    #   dbfdata$order <- xycap[,4] ### creates a new field called "order"
-    #   write.dbf(dbfdata, "capzones.dbf") ## overwrite the file with this new copy
-    #   
-    #   ### export stagnation points
-    #   
-    #   stgpts <- SpatialPoints(xy_stg2, proj4string = proj)
-    #   shapefile(stgpts, filename = "stagnationpts.shp", overwrite = TRUE)
-    #   
-    #   ### Note: the "Points to path" tool in QGIS can be used to generate lines from the sets of points using the "group" and "order" attributes
-    #   
-    #    
-    # }
+    if(input$radioSHP_vis == 1){ ### export shapefiles
+      # ### Save data as shapefiles -----------------------------------------
+      z1 <- long2UTM(input$outputMap_center$lng)
+      #utm.prj <- "+proj=utm +zone=z1 ellps=WGS84"
+      # proj <- CRS("+proj=utm +zone=8 +datum=WGS84") # Carmacks is in UTM Zone 8N
+      proj <- CRS(paste(sep="","+proj=utm ", "+zone=", z1, " +datum=WGS84"))
+
+      ### Need lists of (x,y,phi) and (x,y,psi) points, not just the phi and psi matrices
+
+      ### export equipotential lines
+      counter <- 1
+      xyphi <- matrix(data=0.0,numpts*numpts,4)
+
+      for(i in 1:length(phi_list2)){
+        for(ii in 1:length(phi_list2[[i]]$x)){
+          if(is.na(phi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+            xyphi[counter,1] <- phi_list2[[i]]$x[ii]
+            xyphi[counter,2] <- phi_list2[[i]]$y[ii]
+            xyphi[counter,3] <- i # group number
+            xyphi[counter,4] <- ii # order number
+            counter <- counter + 1
+          }
+        }
+      }
+
+      xyphi <- xyphi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+
+      # print(counter)
+      # write.csv(xyphi, file = "xyphi.txt")
+
+      equipotpts <- SpatialPoints(xyphi, proj4string = proj)
+      shapefile(equipotpts, filename = "equipotential.shp", overwrite = TRUE)
+      # ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+      dbfdata <- read.dbf("equipotential.dbf", as.is = TRUE)
+      # ## add new attribute data (just the numbers 1 to the number of objects)
+      dbfdata$group <- xyphi[,3] ### creates a new field called "group"
+      dbfdata$order <- xyphi[,4] ### creates a new field called "order"
+      write.dbf(dbfdata, "equipotential.dbf") ## overwrite the file with this new copy
+
+      ### export flowlines
+      counter <- 1
+      xypsi <- matrix(data=0.0,numpts*numpts,4)
+
+      for(i in 1:length(psi_list2)){
+        for(ii in 1:length(psi_list2[[i]]$x)){
+          if(is.na(psi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+            xypsi[counter,1] <- psi_list2[[i]]$x[ii]
+            xypsi[counter,2] <- psi_list2[[i]]$y[ii]
+            xypsi[counter,3] <- i # group number
+            xypsi[counter,4] <- ii # order number
+            counter <- counter + 1
+          }
+        }
+      }
+
+      xypsi <- xypsi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+
+      flowlinepts <- SpatialPoints(xypsi, proj4string = proj)
+      shapefile(flowlinepts, filename = "flowlines.shp", overwrite = TRUE)
+      ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+      dbfdata <- read.dbf("flowlines.dbf", as.is = TRUE)
+      # ## add new attribute data (just the numbers 1 to the number of objects)
+      dbfdata$group <- xypsi[,3] ### creates a new field called "group"
+      dbfdata$order <- xypsi[,4] ### creates a new field called "order"
+      write.dbf(dbfdata, "flowlines.dbf") ## overwrite the file with this new copy
+
+      ### export capture zone boundaries
+
+      counter <- 1
+      xycap <- matrix(data=0.0,numpts*numpts,4)
+
+      for(i in 1:length(capzones2)){
+        for(ii in 1:length(capzones2[[i]][,1])){
+          if(is.na(capzones2[[i]][ii,1]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+            xycap[counter,1] <- capzones2[[i]][ii,1]
+            xycap[counter,2] <- capzones2[[i]][ii,2]
+            xycap[counter,3] <- i # group number
+            xycap[counter,4] <- ii # order number
+            counter <- counter + 1
+          }
+        }
+      }
+
+      xycap <- xycap[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+
+      cappts <- SpatialPoints(xycap, proj4string = proj)
+      shapefile(cappts, filename = "capzones.shp", overwrite = TRUE)
+      ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+      dbfdata <- read.dbf("capzones.dbf", as.is = TRUE)
+      # ## add new attribute data (just the numbers 1 to the number of objects)
+      dbfdata$group <- xycap[,3] ### creates a new field called "group"
+      dbfdata$order <- xycap[,4] ### creates a new field called "order"
+      write.dbf(dbfdata, "capzones.dbf") ## overwrite the file with this new copy
+
+      ### export stagnation points
+
+      stgpts <- SpatialPoints(xy_stg2, proj4string = proj)
+      shapefile(stgpts, filename = "stagnationpts.shp", overwrite = TRUE)
+
+      ### Note: the "Points to path" tool in QGIS can be used to generate lines from the sets of points using the "group" and "order" attributes
+      
+      ### Inspired by https://stackoverflow.com/questions/70386165/how-to-download-multiple-files-from-r-shiny-app
+      ### and https://shiny.rstudio.com/reference/shiny/latest/downloadbutton
+      
+      output$downloadSHPlink <- downloadHandler(
+        filename = function(){
+          paste("gis_data_", Sys.Date(), ".zip", sep = "")
+        },
+        content = function(file){
+          
+          temp_directory <- file.path(tempdir(), as.integer(Sys.time()))
+          dir.create(temp_directory)
+          
+          # reactiveValuesToList(to_download) %>%
+          #   imap(function(x,y){
+          #     if(!is.null(x)){
+          #       file_name <- glue("{y}_data.csv")
+          #       readr::write_csv(x, file.path(temp_directory, file_name))
+          #     }
+          #   })
+          
+          shapefile(equipotpts, filename = paste0(temp_directory, "/equipotential.shp"), overwrite = TRUE)
+          shapefile(flowlinepts, filename = paste0(temp_directory, "/flowlines.shp"), overwrite = TRUE)
+          shapefile(cappts, filename = paste0(temp_directory, "/capzones.shp"), overwrite = TRUE)
+          shapefile(stgpts, filename = paste0(temp_directory, "/stagnationpts.shp"), overwrite = TRUE)
+          
+          zip::zip(
+            zipfile = file,
+            files = dir(temp_directory),
+            root = temp_directory
+          )
+        },
+        contentType = "application/zip"
+      )
+      
+    }
     
     
     #   arrowLen <- 0.2
