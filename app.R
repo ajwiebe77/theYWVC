@@ -1,9 +1,13 @@
 # app.R
-# folder: YWVC_v1
 #
-# Author: Andrew J. Wiebe, 13 Dec 2022
+# Author: Andrew J. Wiebe, 19 Dec 2022
 #
-# The Yukon Well Vulnerability Calculator
+# The Yukon Well Vulnerability Calculator, version 1.1
+#
+# Version 1.1 - Notes:
+#     Regarding exporting shapefile points: the "Points to path" tool in, for example, QGIS (https://www.qgis.org/en/site/) can be used to generate lines from the sets of points using the "group" and "order" attributes.
+#     Shapefile export now supported
+#     Results graph on Visualize tab now matches the scale of the map in that tab
 #
 # Code ideas from the websites listed below (and in the code):
 # https://www.r-bloggers.com/2018/11/accessing-openstreetmap-data-with-r/
@@ -15,28 +19,15 @@ library(shiny)
 library(leaflet)
 library(stats) # for nagheli_case1test1test.R
 library(nleqslv) # for nagheli_case1test1test.R
-# library(signal) # for phase unwrap
 library(sp)
-# library(raster)
-# library(rasterVis)
-# library(maptools) ## https://oscarperpinan.github.io/rastervis/ ## this library will be discontinued after 2023
-# library(foreign) # https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile
-# library(akima) # interpp function
-library(sf) ## loading shapefile
+library(raster) # for exporting shapefiles (points)
+library(foreign) # https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile
+library(sf) ## transforming coordinates, loading shapefiles
 
 # FUNCTIONS -------------------------------------------
 
 # List function files
 # https://www.r-bloggers.com/2013/01/storing-a-function-in-a-separate-file-in-r/
-# source(".\\nagheli_case1fcn.R")
-# source(".\\findStg_case1.R")
-# source(".\\dispot_str1_v1deriv.R")
-# source(".\\dispot_str1_v1.R")
-# source(".\\nagheli_case2fcn.R")
-# source(".\\dispot_str2_v4.R")
-# source(".\\dispot_str2_v3deriv_imagX.R")
-# source(".\\holzbecher_v3.R")
-# source(".\\trimAtBoundaries.R")
 ## https://stackoverflow.com/questions/40716589/shiny-app-with-own-function
 source("nagheli_case1fcn.R", local = TRUE)
 source("findStg_case1.R", local = TRUE)
@@ -47,46 +38,7 @@ source("dispot_str2_v4.R", local = TRUE)
 source("dispot_str2_v3deriv_imagX.R", local = TRUE)
 source("holzbecher_v3.R", local = TRUE)
 source("trimAtBoundaries.R", local = TRUE)
-
-# O'Brien, J., 2012.
-# https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
-long2UTM <- function(long) {
-  (floor((long + 180)/6) %% 60) + 1
-}
-
-# More advanced function for UTM Zone - TEST THIS!
-# Bondi, L., 2022
-# https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
-utmzone <- function(lon,lat) {
-  ## Special Cases for Norway & Svalbard
-  if (lat > 55 & lat < 64 & lon > 2 & lon < 6){ 
-    band <- 32
-  } else {
-    if (lat > 71 & lon >= 6 & lon < 9){
-      band <- 31
-    } else {
-      if (lat > 71 & lon >= 9 & lon < 12){
-        band <- 33
-      } else {
-        if (lat > 71 & lon >= 18 & lon < 21){
-          band <- 33
-        } else {
-          if (lat > 71 & lon >= 21 & lon < 24){
-            band <- 35
-          } else {
-            if (lat > 71 & lon >= 30 & lon < 33){
-              band <- 35
-            } else {
-              ## Rest of the world
-              if (lon >= -180 & lon <= 180){
-                band <- (floor((lon + 180)/6) %% 60) + 1
-              } else {
-                band <- "something is wrong"
-              }}}}}}}
-  return(band)
-}
-
-# -----------------------------------------------------
+source("long2UTM.R", local = TRUE)
 
 
 
@@ -332,8 +284,8 @@ ui <- fluidPage(
              # column(3,
                     # actionButton("exportSHP", "Export Shapefile")
              # )
-             radioButtons("radioSHP_vis", h3("Export shapefile"),
-                                             choices = list("Yes" = 1, "No" = 2),selected=2)
+             # radioButtons("radioSHP_vis", h3("Export shapefile"),
+             #                                 choices = list("Yes" = 1, "No" = 2),selected=2)
             ),
            # fluidRow(
            #   column(12,
@@ -452,7 +404,7 @@ ui <- fluidPage(
     tabPanel("About/Disclaimer",
              mainPanel(
                h1("About"),
-               p("The Yukon Well Vulnerability Calculator - version 1.0 - 13 Dec 2022."),
+               p("The Yukon Well Vulnerability Calculator - version 1.1 - 19 Dec 2022."),
                p("The goal of the Yukon Well Vulnerability Calculator app is to facilitate the estimation of risk to drinking water wells located near surface water features. The current version allows users to visualize capture zone boundaries for simple aquifer shapes (rectangles and triangles) bounded by surface water features on one or two sides."),# when potential contaminant sources are present within the capture zone. The first step allows the user to estimate/visualize the well capture zone."),# The second step requests locations of potential contaminant sources. The third step uses a 2D analysis to project what contaminant breakthrough curves might look like at the well under advective and simple dispersive transport. The focus in this case is on the contaminant benzene due to the prevalence of releases of petroleum hydrocarbons in the Yukon Territory (Yukon Government, 2022) and the strict standard for this substance in the Canadian Drinking Water Quality Guidelines (Health Canada, 2020)."),
                p("Well capture zones are often visualized after calculating water flow and/or solute transport with a 3D numerical model. Such models can take months to construct and hours to months to run. Analytical solutions such as the ones used in this app can run in minutes. For reference, other simplified capture zone estimation methods that involve solving equations are discussed by BC MOE (2000). The solutions of Nagheli et al. (2020) incorporate boundaries posed by surface water features."),
                p("Instructions for the use of the app are listed under the 'Instructions' tab."),
@@ -649,6 +601,7 @@ server <- function(input, output, session) {
     #latlong.prj = "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
     
     #utmbounds <- spTransform(input$outputMap_bounds, CRS(utm.prj))
+    # utmbounds <- st_transform(input$outputMap_bounds, crs=CRS(utm.prj)) # would need to fix this
     
     #bx1 <- input$outputMap_bounds_lng1
     #bx2 <- input$outputMap_bounds_lng2
@@ -792,13 +745,17 @@ server <- function(input, output, session) {
       if(input$updateCentre == 0){
         return()
       }else{
-        xy <- as.data.frame(cbind(cenLongit, cenLat))
-        # str(xy)
-        colnames(xy) <- c('X', 'Y')
-        coordinates(xy) <- c("X", "Y")
-        proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")  ## for example
-        trnsf_xy <- spTransform(xy, CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
-        paste0(trnsf_xy$X, ", ", trnsf_xy$Y)
+        # xy <- as.data.frame(cbind(cenLongit, cenLat))
+        # # str(xy)
+        # colnames(xy) <- c('X', 'Y')
+        # coordinates(xy) <- c("X", "Y")
+        xy <- st_point(c(cenLongit, cenLat))
+        # proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")  ## for example
+        # trnsf_xy <- spTransform(xy, CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
+        xy_sfc <- st_sfc(xy, crs=4326)
+        trnsf_xy <- st_transform(xy_sfc, crs=CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
+        # paste0(trnsf_xy$X, ", ", trnsf_xy$Y)
+        paste0(st_coordinates(trnsf_xy)[1], ", ", st_coordinates(trnsf_xy)[2])
       }
       
       
@@ -829,6 +786,7 @@ server <- function(input, output, session) {
       # coordinates(xy) <- c("X", "Y")
       # proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")  ## for example
       # trnsf_xy <- spTransform(xy, CRS(paste("+proj=utm +zone=",zone," ellps=WGS84",sep='')))
+      # trnsf_xy <- st_transform(xy, crs=CRS(paste("+proj=utm +zone=",zone," ellps=WGS84",sep=''))) # replace with this?
       # paste0(trnsf_xy$X, ", ", trnsf_xy$Y)
       
     # })
@@ -858,13 +816,16 @@ server <- function(input, output, session) {
     lat2 <- click$lat
     zone = long2UTM(long2)
     
-    xy <- as.data.frame(cbind(long2, lat2))
-    # str(xy)
-    colnames(xy) <- c('X', 'Y')
-    coordinates(xy) <- c("X", "Y")
-    proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")  ## for example
-    trnsf_xy <- spTransform(xy, CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
-    paste0(trnsf_xy$X, ", ", trnsf_xy$Y)
+    # xy <- as.data.frame(cbind(long2, lat2))
+    # # str(xy)
+    # colnames(xy) <- c('X', 'Y')
+    # coordinates(xy) <- c("X", "Y")
+    xy <- st_point(c(long2, lat2))
+    # proj4string(xy) <- CRS("+proj=longlat +datum=WGS84")  ## for example
+    xy_sfc <- st_sfc(xy, crs=4326)
+    # trnsf_xy <- spTransform(xy, CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
+    trnsf_xy <- st_transform(xy_sfc, crs=CRS(paste("+proj=utm +zone=",zone," +ellps=WGS84 +datum=WGS84", sep='')))
+    # paste0(trnsf_xy$X, ", ", trnsf_xy$Y)
     
     # output$setupMap <- renderLeaflet({
     #   # m_setup <- leaflet() %>% addMarkers(lng = click$lng, lat = click$lat) ## does not work
@@ -1178,8 +1139,61 @@ server <- function(input, output, session) {
     # points(xy_stg2[,1], xy_stg2[,2], pch=18, col="green")
     
     # ### scale the coordinates and translate about the UTM coordinates corresponding to the origin
-    xlimits2 <- xlimits2 * r_wedge + input$originx_setup
-    ylimits2 <- ylimits2 * r_wedge + input$originy_setup
+    
+    ### determine x and y bounds for graph to match the map zoom level
+    z1 <- long2UTM(input$outputMap_center$lng)
+    proj <- CRS(paste(sep="","+proj=utm ", "+zone=", z1, " +datum=WGS84"))
+    bnds <- input$outputMap_bounds
+    # print(bnds)
+    
+    # xycen <- as.data.frame(cbind(input$outputMap_center$lng, input$outputMap_center$lat))
+    xycen <- st_point(c(input$outputMap_center$lng, input$outputMap_center$lat))
+    # colnames(xycen) <- c('X', 'Y')
+    # coordinates(xycen) <- c("X", "Y")
+    # proj4string(xycen) <- CRS("+proj=longlat +datum=WGS84")  ## for example
+    xycen_sfc <- st_sfc(xycen, crs=4326)
+    # trnsf_xycen <- spTransform(xycen, proj)
+    trnsf_xycen <- st_transform(xycen_sfc, crs=proj)
+    
+    # print(st_coordinates(trnsf_xycen)[1])
+    # print(st_coordinates(trnsf_xycen)[2])
+    
+    # xy1 <- as.data.frame(cbind(bnds$west, bnds$south))
+    # colnames(xy1) <- c('X', 'Y')
+    # coordinates(xy1) <- c("X", "Y")
+    xy1 <- st_point(c(bnds$west, bnds$south))
+    # proj4string(xy1) <- CRS("+proj=longlat +datum=WGS84")  ## for example
+    # trnsf_xy1 <- spTransform(xy1, proj)
+    # print(paste0(trnsf_xy1$X, ", ", trnsf_xy1$Y))
+    xy1_sfc <- st_sfc(xy1, crs=4326)
+    trnsf_xy1 <- st_transform(xy1_sfc, crs=proj)
+    
+    # xy2 <- as.data.frame(cbind(bnds$east, bnds$north))
+    # colnames(xy2) <- c('X', 'Y')
+    # coordinates(xy2) <- c("X", "Y")
+    xy2 <- st_point(c(bnds$east, bnds$north))
+    # proj4string(xy2) <- CRS("+proj=longlat +datum=WGS84")  ## for example
+    # trnsf_xy2 <- spTransform(xy2, proj)
+    # print(paste0(trnsf_xy2$X, ", ", trnsf_xy2$Y))
+    xy2_sfc <- st_sfc(xy2, crs=4326)
+    trnsf_xy2 <- st_transform(xy2_sfc, crs=proj)
+    
+    # xdist <- trnsf_xy2$X - trnsf_xy1$X
+    # ydist <- trnsf_xy2$Y - trnsf_xy1$Y
+    xdist <- st_coordinates(trnsf_xy2)[1] - st_coordinates(trnsf_xy1)[1]
+    ydist <- st_coordinates(trnsf_xy2)[2] - st_coordinates(trnsf_xy1)[2]
+    
+    # print(xdist)
+    # print(ydist)
+    
+    # xlimits2 <- xlimits2 * r_wedge + input$originx_setup
+    # ylimits2 <- ylimits2 * r_wedge + input$originy_setup
+    # xlimits2 <- c(trnsf_xycen$X - floor(xdist/2), trnsf_xycen$X + floor(xdist/2))
+    # ylimits2 <- c(trnsf_xycen$Y - floor(ydist/2), trnsf_xycen$Y + floor(ydist/2))
+    xlimits2 <- c(st_coordinates(trnsf_xycen)[1] - floor(xdist/2), st_coordinates(trnsf_xycen)[1] + floor(xdist/2))
+    ylimits2 <- c(st_coordinates(trnsf_xycen)[2] - floor(ydist/2), st_coordinates(trnsf_xycen)[2] + floor(ydist/2))
+    
+    ### 
     
     boundary2[,1] <- boundary2[,1] * r_wedge + input$originx_setup
     boundary2[,2] <- boundary2[,2] * r_wedge + input$originy_setup
@@ -1240,127 +1254,109 @@ server <- function(input, output, session) {
       
     })
     
-    if(input$radioSHP_vis == 1){
-      ### export shapefile
-      # ### Save data as shapefiles -----------------------------------------
-      z1 <- long2UTM(input$outputMap_center$lng)
-      #utm.prj <- "+proj=utm +zone=z1 ellps=WGS84"
-      # proj <- CRS("+proj=utm +zone=8 +datum=WGS84") # Carmacks is in UTM Zone 8N
-      proj <- CRS(paste(sep="","+proj=utm ", "+zone=", z1, " +datum=WGS84"))
-      
-      # ### Need lists of (x,y,phi) and (x,y,psi) points, not just the phi and psi matrices
-      # 
-      # counter <- 1
-      # xycounter <- 1
-      # 
-      # xyphi <- matrix(data=0.0,numpts*numpts,3)
-      # xypsi <- xyphi
-      # 
-      # for (i in 1:numpts){ ## nrow
-      #   for (ii in 1:numpts){ ## ncol
-      #     
-      #     if(is.nan(phi[ii,i]) == FALSE){
-      #       xyphi[counter,1] <- zD_xy2[xycounter,1]
-      #       xyphi[counter,2] <- zD_xy2[xycounter,2]
-      #       xyphi[counter,3] <- phi[ii,i] # try [ii,i] instead of [i,ii]
-      #       xypsi[counter,3] <- psi[ii,i]
-      #       counter <- counter + 1
-      #     }
-      #     
-      #     xycounter <- xycounter + 1
-      #     
-      #   }
-      # }
-      # 
-      # xypsi[,1:2] <- xyphi[,1:2]
-      # 
-      # xyphi <- xyphi[c(1:counter-1), c(1,2,3),drop=FALSE] # remove zero rows
-      # write.csv(xyphi, file = "C:\\RStudio_working\\testCarmacks2\\xyphi_check.txt")
-      # xypsi <- xypsi[c(1:counter-1), c(1,2,3),drop=FALSE] # remove zero rows
-      # write.csv(xypsi, file = "C:\\RStudio_working\\testCarmacks2\\xypsi_check.txt")
-      # 
-      # ### Address phi first: ----------------
-      # equipotpts <- SpatialPoints(xyphi, proj4string = CRS("+proj=utm +zone=8 +datum=WGS84"))
-      # shapefile(equipotpts, filename = "C:\\RStudio_working\\testCarmacks2\\equipot3.shp", overwrite = TRUE)
-      # ## error - non-finite coordinates...
-      # ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
-      # dbfdata <- read.dbf("C:\\RStudio_working\\testCarmacks2\\equipot3.dbf", as.is = TRUE)
-      # ## add new attribute data (just the numbers 1 to the number of objects)
-      # dbfdata$phi <- xyphi[,3] ### creates a new field called "phi"
-      # write.dbf(dbfdata, "C:\\RStudio_working\\testCarmacks2\\equipot3.dbf") ## overwrite the file with this new copy
-      # 
-      # ### Try interpolating the phi data onto a regular grid -----------------------------
-      # ### based on code by: https://stackoverflow.com/questions/64571869/contour-or-image-plot-in-r-based-on-irregular-spaced-non-increasing-x-y-data-p
-      # ### Note: the interpp function takes several minutes to run
-      # xmin1 <- min(xyphi[,1])
-      # xmax1 <- max(xyphi[,1])
-      # ymin1 <- min(xyphi[,2])
-      # ymax1 <- max(xyphi[,2])
-      # 
-      # rx <- seq(xmin1,xmax1,(xmax1 - xmin1)/numpts)
-      # ry <- seq(ymin1, ymax1,(ymax1 - ymin1)/numpts)
-      # grid <- expand.grid(rx,ry)
-      # 
-      # xx <- as.matrix(xyphi[,1],ncol=1)
-      # yy <- as.matrix(xyphi[,2],ncol=1)
-      # zphi <- as.matrix(xyphi[,3],ncol=1)
-      # 
-      # # # Data is interpolated to the defined grid
-      # intp <- interpp(xx,yy,zphi,xo=grid[,1],yo=grid[,2],extrap = F,linear=T)
-      # 
-      # # # To plot the data, convert the data to raster data via a dataframe
-      # data.df<-as.data.frame(cbind(intp$x, intp$y, intp$z))
-      # colnames(data.df)<-c('x','y','z')
-      # e <- extent(data.df[,1:2])
-      # r <- raster(e, ncol=250, nrow=250, crs=proj)
-      # equipotras <- rasterize(data.df[,1:2], r, data.df[,3], fun=mean)
-      # #
-      # # ### from other code: save the raster
-      # writeRaster(equipotras, "C:\\RStudio_working\\testCarmacks2\\carmacks_equipotras.tif", overwrite = TRUE)
-      # 
-      # ### load raster, generate contour lines, and save shapefile
-      # equipotcon <- rasterToContour(equipotras, nlevels=10)
-      # shapefile(equipotcon, filename = "C:\\RStudio_working\\testCarmacks2\\equipotcon.shp", overwrite = TRUE)
-      # 
-      # ### transform the projection of the shapefile contour lines
-      # ### https://stackoverflow.com/questions/33045388/projecting-my-shapefile-data-on-leaflet-map-using-r
-      # equipotcon2 <- st_read("C:\\RStudio_working\\testCarmacks2\\equipotcon.shp")
-      # equipotcon2 <- st_transform(equipotcon2, '+proj=longlat +datum=WGS84')
-      # 
-      # 
-      # ### Now repeat the above steps for psi ----------------
-      # flowpts <- SpatialPoints(xypsi, proj4string = CRS("+proj=utm +zone=8 +datum=WGS84"))
-      # shapefile(flowpts, filename = "C:\\RStudio_working\\testCarmacks2\\flowlns.shp", overwrite = TRUE)
-      # 
-      # dbfdata <- read.dbf("C:\\RStudio_working\\testCarmacks2\\flowlns.dbf", as.is = TRUE)
-      # dbfdata$psi <- xypsi[,3] ### creates a new field called "psi"
-      # write.dbf(dbfdata, "C:\\RStudio_working\\testCarmacks2\\flowlns.dbf") ## overwrite the file with this new copy
-      # 
-      # zpsi <- as.matrix(xypsi[,3],ncol=1)
-      # 
-      # # # Data is interpolated to the defined grid
-      # intp <- interpp(xx,yy,zpsi,xo=grid[,1],yo=grid[,2],extrap = F,linear=T)
-      # 
-      # # # To plot the data, convert the data to raster data via a dataframe
-      # data.df<-as.data.frame(cbind(intp$x, intp$y, intp$z))
-      # colnames(data.df)<-c('x','y','z')
-      # e <- extent(data.df[,1:2])
-      # r <- raster(e, ncol=250, nrow=250, crs=proj)
-      # flowras <- rasterize(data.df[,1:2], r, data.df[,3], fun=mean)
-      # 
-      # # ### from other code: save the raster
-      # writeRaster(flowras, "C:\\RStudio_working\\testCarmacks2\\carmacks_flowras.tif", overwrite = TRUE)
-      # 
-      # ### load raster, generate contour lines, and save shapefile
-      # psicon <- rasterToContour(flowras, nlevels=10)
-      # shapefile(psicon, filename = "C:\\RStudio_working\\testCarmacks2\\psicon.shp", overwrite = TRUE)
-      # 
-      # ### transform the projection of the shapefile contour lines
-      # ### https://stackoverflow.com/questions/33045388/projecting-my-shapefile-data-on-leaflet-map-using-r
-      # psicon2 <- st_read("C:\\RStudio_working\\testCarmacks2\\psicon.shp")
-      # psicon2 <- st_transform(psicon2, '+proj=longlat +datum=WGS84')
-      # 
-    }
+    # if(input$radioSHP_vis == 1){ ### export shapefiles
+    #   # ### Save data as shapefiles -----------------------------------------
+    #   z1 <- long2UTM(input$outputMap_center$lng)
+    #   #utm.prj <- "+proj=utm +zone=z1 ellps=WGS84"
+    #   # proj <- CRS("+proj=utm +zone=8 +datum=WGS84") # Carmacks is in UTM Zone 8N
+    #   proj <- CRS(paste(sep="","+proj=utm ", "+zone=", z1, " +datum=WGS84"))
+    #   
+    #   ### Need lists of (x,y,phi) and (x,y,psi) points, not just the phi and psi matrices
+    #   
+    #   ### export equipotential lines
+    #   counter <- 1
+    #   xyphi <- matrix(data=0.0,numpts*numpts,4)
+    #   
+    #   for(i in 1:length(phi_list2)){
+    #     for(ii in 1:length(phi_list2[[i]]$x)){
+    #       if(is.na(phi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+    #         xyphi[counter,1] <- phi_list2[[i]]$x[ii]
+    #         xyphi[counter,2] <- phi_list2[[i]]$y[ii]
+    #         xyphi[counter,3] <- i # group number
+    #         xyphi[counter,4] <- ii # order number
+    #         counter <- counter + 1
+    #       }
+    #     }
+    #   }
+    #   
+    #   xyphi <- xyphi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+    #   
+    #   # print(counter)
+    #   # write.csv(xyphi, file = "xyphi.txt")
+    #   
+    #   equipotpts <- SpatialPoints(xyphi, proj4string = proj)
+    #   shapefile(equipotpts, filename = "equipotential.shp", overwrite = TRUE)
+    #   # ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+    #   dbfdata <- read.dbf("equipotential.dbf", as.is = TRUE)
+    #   # ## add new attribute data (just the numbers 1 to the number of objects)
+    #   dbfdata$group <- xyphi[,3] ### creates a new field called "group"
+    #   dbfdata$order <- xyphi[,4] ### creates a new field called "order"
+    #   write.dbf(dbfdata, "equipotential.dbf") ## overwrite the file with this new copy
+    #   
+    #   ### export flowlines
+    #   counter <- 1
+    #   xypsi <- matrix(data=0.0,numpts*numpts,4)
+    #   
+    #   for(i in 1:length(psi_list2)){
+    #     for(ii in 1:length(psi_list2[[i]]$x)){
+    #       if(is.na(psi_list2[[i]]$x[ii]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+    #         xypsi[counter,1] <- psi_list2[[i]]$x[ii]
+    #         xypsi[counter,2] <- psi_list2[[i]]$y[ii]
+    #         xypsi[counter,3] <- i # group number
+    #         xypsi[counter,4] <- ii # order number
+    #         counter <- counter + 1
+    #       }
+    #     }
+    #   }
+    #   
+    #   xypsi <- xypsi[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+    #   
+    #   flowlinepts <- SpatialPoints(xypsi, proj4string = proj)
+    #   shapefile(flowlinepts, filename = "flowlines.shp", overwrite = TRUE)
+    #   ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+    #   dbfdata <- read.dbf("flowlines.dbf", as.is = TRUE)
+    #   # ## add new attribute data (just the numbers 1 to the number of objects)
+    #   dbfdata$group <- xypsi[,3] ### creates a new field called "group"
+    #   dbfdata$order <- xypsi[,4] ### creates a new field called "order"
+    #   write.dbf(dbfdata, "flowlines.dbf") ## overwrite the file with this new copy
+    #   
+    #   ### export capture zone boundaries
+    #   
+    #   counter <- 1
+    #   xycap <- matrix(data=0.0,numpts*numpts,4)
+    #   
+    #   for(i in 1:length(capzones2)){
+    #     for(ii in 1:length(capzones2[[i]][,1])){
+    #       if(is.na(capzones2[[i]][ii,1]) == FALSE){ # points outside aquifer domain will have NA coordinates due to trimAtBoundaries() function
+    #         xycap[counter,1] <- capzones2[[i]][ii,1]
+    #         xycap[counter,2] <- capzones2[[i]][ii,2]
+    #         xycap[counter,3] <- i # group number
+    #         xycap[counter,4] <- ii # order number
+    #         counter <- counter + 1
+    #       }
+    #     }
+    #   }
+    #   
+    #   xycap <- xycap[c(1:counter-1), c(1,2,3,4),drop=FALSE] # remove zero rows
+    #   
+    #   cappts <- SpatialPoints(xycap, proj4string = proj)
+    #   shapefile(cappts, filename = "capzones.shp", overwrite = TRUE)
+    #   ### add attribute (https://gis.stackexchange.com/questions/6839/adding-attribute-data-to-shapefile)
+    #   dbfdata <- read.dbf("capzones.dbf", as.is = TRUE)
+    #   # ## add new attribute data (just the numbers 1 to the number of objects)
+    #   dbfdata$group <- xycap[,3] ### creates a new field called "group"
+    #   dbfdata$order <- xycap[,4] ### creates a new field called "order"
+    #   write.dbf(dbfdata, "capzones.dbf") ## overwrite the file with this new copy
+    #   
+    #   ### export stagnation points
+    #   
+    #   stgpts <- SpatialPoints(xy_stg2, proj4string = proj)
+    #   shapefile(stgpts, filename = "stagnationpts.shp", overwrite = TRUE)
+    #   
+    #   ### Note: the "Points to path" tool in QGIS can be used to generate lines from the sets of points using the "group" and "order" attributes
+    #   
+    #    
+    # }
     
     
     #   arrowLen <- 0.2
