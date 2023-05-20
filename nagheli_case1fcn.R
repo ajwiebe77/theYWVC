@@ -1,11 +1,12 @@
 # nagheli_case1test1.m
 # 
-# Andrew J. Wiebe, 3 June 2022
+# Andrew J. Wiebe, 25 Apr 2023; modifies version from 3 June 2022
 # 
 # Objective: Find stagnation points, discharge potential, and streamlines for case 1 of Nagheli et al 2020 method.
 # 
 # Notes:
-  #    This version assumes confined conditions.
+#    Use more than 20 points in the grid - 25 Apr 2023
+#    This version assumes confined conditions.
 #    This version assumes a homogeneous aquifer
 #    Dr. Nagheli advises a small step for dx and dy (e.g., 0.001) in order to have the flow lines go through the well point.
 #    The fig6b case does not look exactly the same - maybe more than 200 points along each direction is not enough? There is one extra stagnation point
@@ -49,38 +50,64 @@ nagheli_case1fcn <- function(numpts, wells, consts){
     return(x_return)
   }
   
-  # maxIter <- 200 ## use a grid instead of random points
-  numptsgrid <- 20
-  step <- 1/(numptsgrid)
-  xvect <- seq(step, 1, by=step)
+  # maxIter <- 200 # random points
+  ## use a grid instead of random points
+  numptsgrid <- 20 # grid version
+  step <- 1/(numptsgrid) # grid version
+  xvect <- seq(step, 1, by=step) # grid version
   
-  # xf <- matrix(0.0, maxIter, 2) #xf = zeros(maxIter,1);
-  xf <- matrix(0.0, numptsgrid * numptsgrid, 2)
+  # xf <- matrix(0.0, maxIter, 2) # random points
+  xf <- matrix(0.0, numptsgrid * numptsgrid, 2) # grid version
   colnames(xf) <- c("x","y")
   xfcount <- 1
   
-  # set.seed(5)
+  # set.seed(5) # random points
   
-  # for (i in 1:maxIter){
-  for (i in 1:(numptsgrid)){
-    for (ii in 1:(numptsgrid)){
+  # for (i in 1:maxIter){ # random points
+  for (i in 1:(numptsgrid)){ # grid version
+    for (ii in 1:(numptsgrid)){ # grid version
       ## NOTE: THE FOLLOWING MAY NOT BE IDEAL FOR CASES WHERE OTHER QUADRANTS AROUND THE ORIGIN ARE IN PLAY
-      # x0 <- c(runif(1, min = 0, max = 1), runif(1, min = 0, max = 1))
-      x0 <- c(xvect[i], xvect[ii])
+      # x0 <- c(runif(1, min = 0, max = 1), runif(1, min = 0, max = 1)) # random points
+      x0 <- c(xvect[i], xvect[ii]) # grid version
       
       xftrial <- nleqslv(x0,ffd1)
       
       if (abs(xftrial$x[1]) <= 2 && abs(xftrial$x[2]) <= 2){
         ## rounding: https://stackoverflow.com/questions/24694001/rounding-to-two-decimal-places-in-octave
         ## try rounding to 2 decimal places for comparison
-        check <- round(100*xftrial$x)/100 == round(100*xf)/100
+        # check <- round(100*xftrial$x)/100 == round(100*xf)/100
         
-        if (sum(check) == 0){
+        # if (sum(check) == 0){
+          # xf[xfcount, c(1,2)] <- cbind(xftrial$x[1],xftrial$x[2])
+          # xfcount <- xfcount + 1
+        # }
+        
+        ### updated from test23.R, 25 Apr 2023
+        check1 <- round(100*xftrial$x[1])/100 == round(100*xf[,1])/100
+        check2 <- round(100*xftrial$x[2])/100 == round(100*xf[,2])/100
+        
+        
+        checklist1 <- which(check1 == TRUE)
+        checklist2 <- which(check2 == TRUE)
+        
+        accept <- TRUE
+        
+        if(length(checklist1) > 0 && length(checklist2) > 0){
+          for(i2 in 1:length(checklist1)){
+            for(i3 in 1:length(checklist2)){
+              if(checklist1[i2] == checklist2[i3]){
+                accept <- FALSE
+              }
+            }
+          }
+        }
+        
+        if(accept == TRUE){
           xf[xfcount, c(1,2)] <- cbind(xftrial$x[1],xftrial$x[2])
           xfcount <- xfcount + 1
         }
       }
-    }
+    } # grid version
   }
   
   xf = xf[c(1:xfcount - 1), c(1,2)]
