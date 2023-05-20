@@ -1,6 +1,6 @@
 # nagheli_case2fcn.r
 #
-# Andrew J. Wiebe, 6 Dec 2022; modifies version from 3 June 2022, 6 Oct 2022
+# Andrew J. Wiebe, 25 Apr 2023; modifies version from 3 Jan 2023, 6 Dec 2022
 # 
 # Use the Nagheli et al. (2020) method to find the stagnation point for a triangular aquifer (case 2)
 #    with two stream boundaries and one semi-infinite boundary, and with multiple pumping wells.
@@ -26,19 +26,29 @@
 #
 # Provide an option to remove stagnation points outside the aquifer
 #
-# In an effort to evade branch cuts, return a matrix with columns for x,y,phi, then use raster stuff with slope and aspect to draw vectors
 #
 # 7 Sep 2022 - use points from 1/numpts to 2 in order to capture image well beyond permafrost boundary
+#
+# Parameters:
+#    numpts = the number of grid cells along x and y directions
+#    option = option from Nagheli et al. (2020)
+#    wells(:,1) = real coordinate for each well location (real(zwD))
+#    wells(:,2) = complex coordinate for each well location (imag(zwD))
+#    wells(:,3) = pumping rate for each well (>0 for injection, < 0 for extraction)
+#    consts(1,1) - r_wedge, i.e., the length of the wedge in the actual system
+#    consts(2,1) - alpha, i.e., the angle of the triangular aquifer
+#    consts(3,1) - beta, i.e., the angle between the ambient aquifer flow direction and the x-axis
+#    consts(4,1) - K, i.e., the hydraulic conductivity of the aquifer
+#    consts(5,1) - b, i.e., the thickness of the aquifer
+#    consts(6,1) - q0, i.e., regional uniform flow per unit width
+# 
+# Returns a list:
+#    plotdata[[1]] <- x and y coordinates of stagnation points
+#    plotdata[[2]] <- a two-column vector of x and y values corresponding to a grid for the phi (equipotential) and psi (flowline) values
+#    plotdata[[3]] <- a two-dimensional matrix grid of phi (equipotential) values
+#    plotdata[[4]] <- a two-dimensional matrix grid of psi (flowline) values
+#
 
-# library(shiny)
-# library(stats)
-# library(nleqslv)
-# library(signal) # for phase unwrap
-
-# List function files
-# https://www.r-bloggers.com/2013/01/storing-a-function-in-a-separate-file-in-r/
-# source("C:\\RStudio_working\\dispot_str2_v4.R")
-# source("C:\\RStudio_working\\dispot_str2_v3deriv_imagX.R")
 
 nagheli_case2fcn <- function(numpts, option, wells, consts){
 
@@ -65,24 +75,24 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   
   #### Find Stagnation Points --------------------------------------------------------
   
-  maxIter <- 200 ## use a grid instead of random points
-  # numptsgrid <- 20
-  # step <- 1/(numptsgrid)
-  # xvect <- seq(step, 1, by=step)
+  maxIter <- 200  # random points
+  # numptsgrid <- 20 # grid version
+  # step <- 1/(numptsgrid)  # grid version
+  # xvect <- seq(step, 1, by=step)  # grid version
   
-  xf <- matrix(0.0, maxIter, 2) #xf = zeros(maxIter,1);
-  # xf <- matrix(0.0, numptsgrid * numptsgrid, 2)
+  xf <- matrix(0.0, maxIter, 2)  # random points
+  # xf <- matrix(0.0, numptsgrid * numptsgrid, 2) # grid version
   colnames(xf) <- c("x","y")
   xfcount <- 1
   
-  # set.seed(5)
+  set.seed(5) # random points
   
-  for (i in 1:maxIter){
-  # for (i in 1:(numptsgrid)){
-    # for (ii in 1:(numptsgrid)){
+  for (i in 1:maxIter){ # random points
+  # for (i in 1:(numptsgrid)){  # grid version
+    # for (ii in 1:(numptsgrid)){  # grid version
       ## NOTE: THE FOLLOWING MAY NOT BE IDEAL FOR CASES WHERE OTHER QUADRANTS AROUND THE ORIGIN ARE IN PLAY
-      x0 <- c(runif(1, min = 0, max = 1), runif(1, min = 0, max = 1))
-      # x0 <- c(xvect[i], xvect[ii])
+      x0 <- c(runif(1, min = 0, max = 1), runif(1, min = 0, max = 1)) # random points
+      # x0 <- c(xvect[i], xvect[ii]) # grid version
       
       checkffd <- ffd(x0)
       
@@ -95,19 +105,45 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
           ## rounding: https://stackoverflow.com/questions/24694001/rounding-to-two-decimal-places-in-octave
           ## try rounding to 2 decimal places for comparison
           # check <- round(100*xftrial$x)/100 == round(100*xf)/100 # numbers are near zero
-          check <- round(1000*xftrial$x)/1000 == round(1000*xf)/1000
+          # check <- round(1000*xftrial$x)/1000 == round(1000*xf)/1000
+          # 
+          # if (sum(check) == 0){
+          #   xf[xfcount, c(1,2)] <- cbind(xftrial$x[1],xftrial$x[2])
+          #   xfcount <- xfcount + 1
+          # }
           
-          if (sum(check) == 0){
+          ### updated from test23.R, 25 Apr 2023
+          check1 <- round(100*xftrial$x[1])/100 == round(100*xf[,1])/100
+          check2 <- round(100*xftrial$x[2])/100 == round(100*xf[,2])/100
+          
+          
+          checklist1 <- which(check1 == TRUE)
+          checklist2 <- which(check2 == TRUE)
+          
+          accept <- TRUE
+          
+          if(length(checklist1) > 0 && length(checklist2) > 0){
+            for(i2 in 1:length(checklist1)){
+              for(i3 in 1:length(checklist2)){
+                if(checklist1[i2] == checklist2[i3]){
+                  accept <- FALSE
+                }
+              }
+            }
+          }
+          
+          if(accept == TRUE){
             xf[xfcount, c(1,2)] <- cbind(xftrial$x[1],xftrial$x[2])
             xfcount <- xfcount + 1
           }
         }
       }
-    # }
+    # } # grid version
   }
   
-  xf = xf[c(1:xfcount - 1), c(1,2)]
+  xf = xf[c(1:xfcount - 1), c(1,2), drop=FALSE] # xf = xf[c(1:xfcount - 1), c(1,2)]
   
+  # print(xf)
   
   ## Note: if maxIter is high enough (e.g., 50 for five wells), all the stagnation points are found
   xy_stg <- matrix(0.0, (xfcount-1),2)
@@ -117,7 +153,7 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   xy_stg[,1] <- xf[,"x"]
   xy_stg[,2]<- xf[,"y"]
   
-  # print(xy_stg)
+  # print(nrow(xy_stg))
   
   #### NOTE: AT THIS POINT, THE POINTS SHOULD BE ANALYZED AND ONLY THOSE WITHIN THE AQUIFER SHOULD BE SELECTED
   #### IDENTIFY STAGNATION POINTS LOCATED WITHIN AQUIFER (PUT THEM IN xy_stg2) ------
@@ -128,6 +164,10 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   	### if radius < 1 and angle <= alpha, then OK
   	disttemp <- sqrt(x_stg[i]^2 + y_stg[i]^2)
   	thetatemp <- atan(y_stg[i] / x_stg[i])
+  	
+  	# print(thetatemp)
+  	# print(y_stg[i])
+  	# print(x_stg[i])
   	
   	if (thetatemp < 0 && y_stg[i] > 0 &&  x_stg[i] < 0){ # NW quadrant
   	  thetatemp <- pi + thetatemp
@@ -144,6 +184,9 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   }
   
   xy_stg2 <- xy_stg2[c(1:counter-1), c(1,2),drop=FALSE] # remove zero rows, this time, prevent the matrix from becoming a vector if the number of rows drops down to 1 (https://stackoverflow.com/questions/61756409/why-does-nrow-return-a-null-value)
+  
+  # print("nrow")
+  # print(nrow(xy_stg2))
   
   #### find discharge potential magnitude through the stagnation point ------------------
   
@@ -167,21 +210,28 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   # zDxy_sqr <- cbind((1:(2*numpts)) / numpts, (1:(2*numpts)) / numpts) # try going from 1/numpts up to 2
   
   ### from nagheli_case2test4.R
-  if (option == 1 || option ==2 || option == 3){
-    zDxy_sqr <- cbind((1:numpts) / numpts, (1:numpts) / numpts)  ### should this go from zero to numpts?????????????
+  if (option == 1 || option == 2 || option == 3){
+    # zDxy_sqr <- cbind((1:numpts) / numpts, (1:numpts) / numpts)  ### should this go from zero to numpts?????????????
+    zDxy_sqr <- cbind(seq(0,1,1/(numpts)), seq(0,1,(1/(numpts)))) # try this instead, for consistency with the option 4 line below
+    xpts_sqr <- matrix(0.0,((numpts + 1) * (numpts + 1)),3) # revise this from below
+    numpts_rev <- numpts + 1
   }else{
     # zDxy_sqr <- cbind(seq(-1,1,2/(numpts-1)), seq(0,2,(2/(numpts-1))))
     zDxy_sqr <- cbind(seq(-1,1,1/(numpts)), seq(0,2,(1/(numpts))))
+    xpts_sqr <- matrix(0.0,((2 * numpts + 1) * (2 * numpts + 1)),3) # put this here instead of below
+    numpts_rev <- 2 * numpts + 1
   }
   
   # str(zDxy_sqr)
   
   counter <- 1
   
-  xpts_sqr <- matrix(0.0,((2 * numpts + 1) * (2 * numpts + 1)),3)
+  # xpts_sqr <- matrix(0.0,((2 * numpts + 1) * (2 * numpts + 1)),3)
 
-  for (i in 1:(2*numpts+1)){
-  	for (ii in 1:(2*numpts+1)){
+  # for (i in 1:(2*numpts+1)){
+  # 	for (ii in 1:(2*numpts+1)){
+  for(i in 1:numpts_rev){
+    for(ii in 1:numpts_rev){
   		xpts_sqr[counter,1] <- zDxy_sqr[i,1]
   		xpts_sqr[counter,2] <- zDxy_sqr[ii,2]
   		xpts_sqr[counter,3] <- 0 # phi0D
@@ -189,20 +239,25 @@ nagheli_case2fcn <- function(numpts, option, wells, consts){
   	}
   }
   
-  comOmegaD_sqr <- matrix(0.0,((2*numpts+1)*(2*numpts+1)),1)
+  # comOmegaD_sqr <- matrix(0.0,((2*numpts+1)*(2*numpts+1)),1) # change this
+  comOmegaD_sqr <- matrix(0.0,(numpts_rev * numpts_rev),1) # changed 3 Jan 2023
   comOmegaD_sqr <- dispot_str2_v4(wells, consts, xpts_sqr)
   phiD_sqr <- Re(comOmegaD_sqr)
   psiD_sqr <- Im(comOmegaD_sqr)
   
   xy_phiD <- cbind(xpts_sqr[,1], xpts_sqr[,2], phiD_sqr[,1])
   
-  phiD_sqr3 <- matrix(0.0,2*numpts+1, 2*numpts+1)
-  psiD_sqr3 <- matrix(0.0,2*numpts+1, 2*numpts+1)
+  # phiD_sqr3 <- matrix(0.0,2*numpts+1, 2*numpts+1)
+  # psiD_sqr3 <- matrix(0.0,2*numpts+1, 2*numpts+1)
+  phiD_sqr3 <- matrix(0.0,numpts_rev, numpts_rev) # 3 Jan 2023
+  psiD_sqr3 <- matrix(0.0,numpts_rev, numpts_rev) # 3 Jan 2023
   
   counter <- 1
   
-  for (i in 1:(2*numpts+1)){
-  	for (ii in 1:(2*numpts+1)){
+  # for (i in 1:(2*numpts+1)){ # 3 Jan 2023
+  	# for (ii in 1:(2*numpts+1)){ # 3 Jan 2023
+  	for (i in 1:numpts_rev){
+  	 for (ii in 1:numpts_rev){
   	  phiD_sqr3[i,ii] <- phiD_sqr[counter]
   	  psiD_sqr3[i,ii] <- psiD_sqr[counter]
   		counter <- counter + 1
